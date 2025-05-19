@@ -1,59 +1,64 @@
 <#
 .SYNOPSIS
-    Extrae el atributo dNSHostName de todos los equipos en una OU específica de Active Directory
-    sin requerir el módulo ActiveDirectory de RSAT.
+    Obtiene el atributo dNSHostName de todos los equipos en una OU de Active Directory
+    usando clases .NET (System.DirectoryServices).
 .DESCRIPTION
-    Este script utiliza clases de .NET (System.DirectoryServices) para realizar
-    una búsqueda LDAP directamente contra el controlador de dominio.
+    Define una función PowerShell que realiza una consulta LDAP contra un controlador de dominio
+    o el dominio por defecto para listar los dNSHostName de equipos en la OU indicada.
 .PARAMETER SearchBase
     Distinguished Name (DN) de la OU donde buscar, por ejemplo:
     'OU=Equipos,OU=Oficina,DC=ejemplo,DC=local'
 .PARAMETER Server
-    (Opcional) Controlador de dominio o servidor LDAP al que conectarse, ej. 'dc01.ejemplo.local'.
+    Controlador de dominio o servidor LDAP al que conectarse (opcional).
+    Si no se especifica, usa el dominio por defecto.
 .EXAMPLE
-    .\Get-DnsHostnames.ps1 -SearchBase 'OU=Equipos,DC=ejemplo,DC=local'
-    Busca contra el dominio por defecto.
+    # Importa la función en tu sesión actual:
+    . .\Get-DnsHostnames.ps1
+    # Llama a la función:
+    Get-DnsHostnames -SearchBase 'OU=Equipos,DC=ejemplo,DC=local'
 .EXAMPLE
-    .\Get-DnsHostnames.ps1 -SearchBase 'OU=Equipos,DC=ejemplo,DC=local' -Server 'dc01.ejemplo.local'
-    Busca usando un DC específico.
+    # Usando un DC específico:
+    Get-DnsHostnames -SearchBase 'OU=Equipos,DC=ejemplo,DC=local' -Server 'dc01.ejemplo.local'
 #>
-[CmdletBinding()]
-param(
-    [Parameter(Mandatory = $true)]
-    [string]$SearchBase,
+function Get-DnsHostnames {
+    [CmdletBinding()]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [string]$SearchBase,
 
-    [Parameter(Mandatory = $false)]
-    [string]$Server
-)
+        [Parameter(Mandatory = $false)]
+        [string]$Server
+    )
 
-try {
-    # Construir la ruta LDAP
-    $ldapPath = if ($Server) {
-        "LDAP://$Server/$SearchBase"
-    } else {
-        "LDAP://$SearchBase"
-    }
-
-    # Conexión al directorio
-    $root = New-Object System.DirectoryServices.DirectoryEntry($ldapPath)
-
-    # Configurar el buscador
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher($root)
-    $searcher.Filter = '(objectCategory=computer)'
-    $searcher.PageSize = 1000
-    $null = $searcher.PropertiesToLoad.Add('dNSHostName')
-
-    # Ejecutar búsqueda
-    $results = $searcher.FindAll()
-
-    # Mostrar resultados
-    foreach ($result in $results) {
-        $dns = $result.Properties['dNSHostName']
-        if ($dns) {
-            Write-Output $dns
+    try {
+        # Construir la ruta LDAP
+        $ldapPath = if ($Server) {
+            "LDAP://$Server/$SearchBase"
+        } else {
+            "LDAP://$SearchBase"
         }
+
+        # Conexión al directorio
+        $root = New-Object System.DirectoryServices.DirectoryEntry($ldapPath)
+
+        # Configurar el buscador
+        $searcher = New-Object System.DirectoryServices.DirectorySearcher($root)
+        $searcher.Filter = '(objectCategory=computer)'
+        $searcher.PageSize = 1000
+        $null = $searcher.PropertiesToLoad.Add('dNSHostName')
+
+        # Ejecutar búsqueda
+        $results = $searcher.FindAll()
+
+        # Mostrar resultados
+        foreach ($result in $results) {
+            $dns = $result.Properties['dNSHostName']
+            if ($dns) {
+                Write-Output $dns
+            }
+        }
+    } catch {
+        Write-Error "Error al realizar la consulta LDAP: $_"
+        return
     }
-} catch {
-    Write-Error "Error al realizar la consulta LDAP: $_"
-    exit 1
 }
