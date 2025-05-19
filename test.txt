@@ -1,0 +1,59 @@
+<#
+.SYNOPSIS
+    Extrae el atributo dNSHostName de todos los equipos en una OU específica de Active Directory
+    sin requerir el módulo ActiveDirectory de RSAT.
+.DESCRIPTION
+    Este script utiliza clases de .NET (System.DirectoryServices) para realizar
+    una búsqueda LDAP directamente contra el controlador de dominio.
+.PARAMETER SearchBase
+    Distinguished Name (DN) de la OU donde buscar, por ejemplo:
+    'OU=Equipos,OU=Oficina,DC=ejemplo,DC=local'
+.PARAMETER Server
+    (Opcional) Controlador de dominio o servidor LDAP al que conectarse, ej. 'dc01.ejemplo.local'.
+.EXAMPLE
+    .\Get-DnsHostnames.ps1 -SearchBase 'OU=Equipos,DC=ejemplo,DC=local'
+    Busca contra el dominio por defecto.
+.EXAMPLE
+    .\Get-DnsHostnames.ps1 -SearchBase 'OU=Equipos,DC=ejemplo,DC=local' -Server 'dc01.ejemplo.local'
+    Busca usando un DC específico.
+#>
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$SearchBase,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Server
+)
+
+try {
+    # Construir la ruta LDAP
+    $ldapPath = if ($Server) {
+        "LDAP://$Server/$SearchBase"
+    } else {
+        "LDAP://$SearchBase"
+    }
+
+    # Conexión al directorio
+    $root = New-Object System.DirectoryServices.DirectoryEntry($ldapPath)
+
+    # Configurar el buscador
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher($root)
+    $searcher.Filter = '(objectCategory=computer)'
+    $searcher.PageSize = 1000
+    $null = $searcher.PropertiesToLoad.Add('dNSHostName')
+
+    # Ejecutar búsqueda
+    $results = $searcher.FindAll()
+
+    # Mostrar resultados
+    foreach ($result in $results) {
+        $dns = $result.Properties['dNSHostName']
+        if ($dns) {
+            Write-Output $dns
+        }
+    }
+} catch {
+    Write-Error "Error al realizar la consulta LDAP: $_"
+    exit 1
+}
